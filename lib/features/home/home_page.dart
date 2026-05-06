@@ -3,8 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../services/supabase_service.dart';
 import '../../models/user_profile.dart';
-import '../../widgets/ai_assistant_fab.dart';
-
 import '../../widgets/logo_header.dart';
 import '../../core/theme.dart';
 
@@ -48,7 +46,6 @@ class _HomePageState extends ConsumerState<HomePage> {
         ],
       ),
       drawer: _buildDrawer(context),
-      floatingActionButton: const AIAssistantFAB(),
       body: RefreshIndicator(
         onRefresh: _loadProfile,
         child: ListView(
@@ -173,12 +170,12 @@ class _HomePageState extends ConsumerState<HomePage> {
 
   Widget _buildDrawer(BuildContext context) {
     return Drawer(
-      backgroundColor: AppColors.black,
+      backgroundColor: AppColors.white,
       child: ListView(
         padding: EdgeInsets.zero,
         children: [
           DrawerHeader(
-            decoration: const BoxDecoration(color: AppColors.darkGrey),
+            decoration: const BoxDecoration(color: AppColors.lightGrey),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -188,7 +185,14 @@ class _HomePageState extends ConsumerState<HomePage> {
               ],
             ),
           ),
-          ListTile(leading: const Icon(Icons.exit_to_app), title: const Text('Cerrar sesión'), onTap: () => SupabaseService.signOut()),
+          ListTile(
+            leading: const Icon(Icons.exit_to_app), 
+            title: const Text('Cerrar sesión'), 
+            onTap: () async {
+              await SupabaseService.signOut();
+              if (mounted) context.go('/login');
+            }
+          ),
         ],
       ),
     );

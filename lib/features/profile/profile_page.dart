@@ -11,28 +11,26 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
-  UserProfile? _profile;
-  bool _error = false;
+  late Future<Map<String, dynamic>?> _profileFuture;
 
   @override
   void initState() {
     super.initState();
-    _load();
+    _profileFuture = SupabaseService.getProfile();
   }
 
-  Future<void> _load() async {
+  void _retry() {
+    setState(() {
+      _profileFuture = SupabaseService.getProfile();
+    });
+  }
+
+  Future<void> _recreate() async {
     try {
-      final data = await SupabaseService.getProfile();
-      if (data != null && mounted) {
-        setState(() {
-          _profile = UserProfile.fromMap(data);
-          _error = false;
-        });
-      } else if (mounted) {
-        setState(() => _error = true);
-      }
+      await SupabaseService.recreateProfile('Guerrero Moro');
+      _retry();
     } catch (e) {
-      if (mounted) setState(() => _error = true);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
     }
   }
 
@@ -41,83 +39,106 @@ class _ProfilePageState extends State<ProfilePage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Perfil'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.go('/'),
-        ),
+        automaticallyImplyLeading: true,
       ),
-      body: _error 
-        ? const Center(child: Text('Error al cargar perfil. Intenta de nuevo.'))
-        : _profile == null
-          ? const Center(child: CircularProgressIndicator())
-          : _buildProfileBody(),
+      body: FutureBuilder<Map<String, dynamic>?>(
+        future: _profileFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          
+          if (snapshot.hasError) {
+            return _buildErrorState('Error de conexión o permisos.');
+          }
+
+          final data = snapshot.data;
+          if (data == null) {
+            return _buildNoProfileState();
+          }
+
+          final profile = UserProfile.fromMap(data);
+          return _buildProfileContent(profile);
+        },
+      ),
     );
   }
 
-  Widget _buildProfileBody() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+  Widget _buildErrorState(String msg) {
+    return Center(
       child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const CircleAvatar(
-            radius: 50,
-            backgroundColor: Colors.grey,
-            child: Icon(Icons.person, size: 50, color: Colors.white),
-          ),
+          const Icon(Icons.error_outline, size: 64, color: Colors.red),
           const SizedBox(height: 16),
-          Text(
-            _profile!.fullName ?? 'Usuario',
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 32),
-          _buildStatCard(),
-          const SizedBox(height: 32),
-          ElevatedButton.icon(
-            onPressed: () async {
-              await SupabaseService.signOut();
-              if (mounted) context.go('/login');
-            },
-            icon: const Icon(Icons.logout),
-            label: const Text('CERRAR SESIÓN'),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
-          ),
+          Text(msg),
+          TextButton(onPressed: _retry, child: const Text('REINTENTAR')),
         ],
       ),
     );
   }
 
-  Widget _buildStatCard() {
+  Widget _buildNoProfileState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.person_off, size: 64, color: Colors.grey),
+          const SizedBox(height: 16),
+          const Text('Perfil no encontrado'),
+          const SizedBox(height: 24),
+          ElevatedButton(onPressed: _recreate, child: const Text('RECREAR PERFIL')),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProfileContent(UserProfile profile) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        children: [
+          const CircleAvatar(radius: 50, child: Icon(Icons.person, size: 50)),
+          const SizedBox(height: 16),
+          Text(profile.fullName ?? 'Usuario', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 32),
+          _StatCard(profile: profile),
+          const SizedBox(height: 32),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () async {
+                await SupabaseService.signOut();
+                if (mounted) context.go('/login');
+              },
+              icon: const Icon(Icons.logout),
+              label: const Text('CERRAR SESIÓN'),
+              style: OutlinedButton.styleFrom(foregroundColor: Colors.redAccent, side: const BorderSide(color: Colors.redAccent)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatCard extends StatelessWidget {
+  final UserProfile profile;
+  const _StatCard({required this.profile});
+
+  @override
+  Widget build(BuildContext context) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
-            _StatItem(label: 'Racha Actual', value: '${_profile!.currentStreak} 🔥'),
-            _StatItem(
-              label: 'Último Entreno', 
-              value: _profile!.lastWorkoutDate != null 
-                ? '${_profile!.lastWorkoutDate!.day}/${_profile!.lastWorkoutDate!.month}' 
-                : '--/--',
-            ),
+            Column(children: [Text('${profile.currentStreak}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.green)), const Text('Racha 🔥')]),
+            Column(children: [Text(profile.lastWorkoutDate != null ? '${profile.lastWorkoutDate!.day}/${profile.lastWorkoutDate!.month}' : '--/--', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.green)), const Text('Último')]),
           ],
         ),
       ),
-    );
-  }
-}
-
-class _StatItem extends StatelessWidget {
-  final String label, value;
-  const _StatItem({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.green)),
-        Text(label, style: const TextStyle(color: Colors.grey, fontSize: 12)),
-      ],
     );
   }
 }
