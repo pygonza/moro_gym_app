@@ -5,6 +5,9 @@ import '../../services/supabase_service.dart';
 import '../../models/user_profile.dart';
 import '../../widgets/ai_assistant_fab.dart';
 
+import '../../widgets/logo_header.dart';
+import '../../core/theme.dart';
+
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
 
@@ -35,94 +38,187 @@ class _HomePageState extends ConsumerState<HomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Moro Gym')),
-      drawer: Drawer(
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            DrawerHeader(
-              decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  CircleAvatar(radius: 30, child: Icon(Icons.person, size: 30)),
-                  const SizedBox(height: 8),
-                  Text(_profile?.fullName ?? 'Usuario', style: const TextStyle(color: Colors.white, fontSize: 18)),
-                ],
-              ),
-            ),
-            ListTile(leading: const Icon(Icons.fitness_center), title: const Text('Rutinas'), onTap: () => context.go('/routines')),
-            ListTile(leading: const Icon(Icons.trending_up), title: const Text('Progreso'), onTap: () => context.go('/progress')),
-            ListTile(leading: const Icon(Icons.emoji_events), title: const Text('Logros'), onTap: () => context.go('/achievements')),
-            ListTile(leading: const Icon(Icons.person), title: const Text('Perfil'), onTap: () => context.go('/profile')),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.exit_to_app),
-              title: const Text('Cerrar sesión'),
-              onTap: () async {
-                await SupabaseService.signOut();
-                if (mounted) context.go('/login');
-              },
-            ),
-          ],
-        ),
+      appBar: AppBar(
+        title: const LogoHeader(height: 40),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.person_outline),
+            onPressed: () => context.go('/profile'),
+          ),
+        ],
       ),
+      drawer: _buildDrawer(context),
       floatingActionButton: const AIAssistantFAB(),
       body: RefreshIndicator(
         onRefresh: _loadProfile,
         child: ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(20),
           children: [
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
+            _buildWelcomeHeader(),
+            const SizedBox(height: 24),
+            _buildActionGrid(context),
+            const SizedBox(height: 32),
+            _buildRecentActivityHeader(),
+            const SizedBox(height: 12),
+            _buildQuickStartCard(context),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWelcomeHeader() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Hola, ${_profile?.fullName?.split(' ').first ?? 'Guerrero'}',
+          style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 4),
+        Row(
+          children: [
+            const Icon(Icons.local_fire_department, color: Colors.orange, size: 20),
+            const SizedBox(width: 4),
+            Text(
+              'Racha de $_streak días',
+              style: const TextStyle(color: Colors.grey, fontSize: 16),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActionGrid(BuildContext context) {
+    return GridView.count(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      crossAxisCount: 2,
+      mainAxisSpacing: 16,
+      crossAxisSpacing: 16,
+      childAspectRatio: 1.5,
+      children: [
+        _ActionCard(
+          title: 'Rutinas',
+          icon: Icons.fitness_center,
+          color: AppColors.green,
+          onTap: () => context.go('/routines'),
+        ),
+        _ActionCard(
+          title: 'Progreso',
+          icon: Icons.trending_up,
+          color: Colors.blueAccent,
+          onTap: () => context.go('/progress'),
+        ),
+        _ActionCard(
+          title: 'Logros',
+          icon: Icons.emoji_events,
+          color: Colors.amber,
+          onTap: () => context.go('/achievements'),
+        ),
+        _ActionCard(
+          title: 'Perfil',
+          icon: Icons.person,
+          color: Colors.purpleAccent,
+          onTap: () => context.go('/profile'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRecentActivityHeader() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text('Tu Próximo Reto', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+      ],
+    );
+  }
+
+  Widget _buildQuickStartCard(BuildContext context) {
+    return Card(
+      child: InkWell(
+        onTap: () => context.go('/start-workout'),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.green.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.play_arrow, color: AppColors.green, size: 32),
+              ),
+              const SizedBox(width: 20),
+              Expanded(
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('¡Bienvenido!', style: Theme.of(context).textTheme.headlineSmall),
-                    const SizedBox(height: 8),
-                    Text('Racha actual: $_streak días', style: TextStyle(fontSize: 24, color: Theme.of(context).colorScheme.primary)),
-                    if (_profile?.currentStreak == 0)
-                      const Text('¡Empieza tu primera sesión hoy!'),
+                    const Text('Iniciar Entrenamiento', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    Text('Supera tus límites hoy', style: TextStyle(color: Colors.grey[400])),
                   ],
                 ),
               ),
-            ),
-            const SizedBox(height: 16),
-            Text('Acciones rápidas', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            Row(
+              const Icon(Icons.chevron_right, color: Colors.grey),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDrawer(BuildContext context) {
+    return Drawer(
+      backgroundColor: AppColors.black,
+      child: ListView(
+        padding: EdgeInsets.zero,
+        children: [
+          DrawerHeader(
+            decoration: const BoxDecoration(color: AppColors.darkGrey),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    icon: const Icon(Icons.play_arrow),
-                    label: const Text('Iniciar entreno'),
-                    onPressed: () => context.go('/start-workout'),
-                  ),
-                ),
+                const LogoHeader(height: 50),
+                const Spacer(),
+                Text(_profile?.fullName ?? 'Usuario', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
               ],
             ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    icon: const Icon(Icons.list_alt),
-                    label: const Text('Mis rutinas'),
-                    onPressed: () => context.go('/routines'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    icon: const Icon(Icons.emoji_events),
-                    label: const Text('Logros'),
-                    onPressed: () => context.go('/achievements'),
-                  ),
-                ),
-              ],
-            ),
-          ],
+          ),
+          ListTile(leading: const Icon(Icons.exit_to_app), title: const Text('Cerrar sesión'), onTap: () => SupabaseService.signOut()),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActionCard extends StatelessWidget {
+  final String title;
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _ActionCard({required this.title, required this.icon, required this.color, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: color, size: 32),
+              const SizedBox(height: 8),
+              Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+            ],
+          ),
         ),
       ),
     );

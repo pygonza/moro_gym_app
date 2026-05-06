@@ -4,9 +4,10 @@ import 'package:google_fonts/google_fonts.dart';
 class AppColors {
   static const Color black = Color(0xFF000000);
   static const Color white = Color(0xFFFFFFFF);
-  static const Color green = Color(0xFF4CAF50); // Verde vibrante tipo fitness
+  static const Color green = Color(0xFF4CAF50);
   static const Color darkGrey = Color(0xFF121212);
   static const Color mediumGrey = Color(0xFF1E1E1E);
+  static const Color lightGrey = Color(0xFF2C2C2C);
 }
 
 final appTheme = ThemeData(
@@ -28,13 +29,16 @@ final appTheme = ThemeData(
   ),
   cardTheme: CardThemeData(
     color: AppColors.mediumGrey,
-    elevation: 4,
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+    elevation: 0,
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(12),
+      side: BorderSide(color: Colors.grey.withOpacity(0.1)),
+    ),
   ),
   appBarTheme: AppBarTheme(
     backgroundColor: AppColors.black,
     elevation: 0,
-    centerTitle: true,
+    centerTitle: false, // Logo a la izquierda
     titleTextStyle: GoogleFonts.montserrat(
       fontSize: 20, 
       fontWeight: FontWeight.bold, 
@@ -46,13 +50,9 @@ final appTheme = ThemeData(
     style: ElevatedButton.styleFrom(
       backgroundColor: AppColors.green,
       foregroundColor: AppColors.black,
-      textStyle: const TextStyle(fontWeight: FontWeight.bold),
-    ),
-  ),
-  outlinedButtonTheme: OutlinedButtonThemeData(
-    style: OutlinedButton.styleFrom(
-      foregroundColor: AppColors.green,
-      side: const BorderSide(color: AppColors.green),
+      minimumSize: const Size(double.infinity, 50),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
     ),
   ),
   inputDecorationTheme: InputDecorationTheme(
@@ -60,7 +60,15 @@ final appTheme = ThemeData(
     fillColor: AppColors.mediumGrey,
     border: OutlineInputBorder(
       borderRadius: BorderRadius.circular(12),
-      borderSide: BorderSide.none,
+      borderSide: const BorderSide(color: Colors.transparent),
+    ),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: const BorderSide(color: Colors.transparent),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: const BorderSide(color: AppColors.green, width: 1),
     ),
     prefixIconColor: AppColors.green,
     labelStyle: const TextStyle(color: Colors.grey),

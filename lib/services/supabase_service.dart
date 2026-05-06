@@ -45,6 +45,23 @@ class SupabaseService {
     return List<Map<String, dynamic>>.from(data);
   }
 
+  static Future<int> createExercise({
+    required String name,
+    String? muscleGroup,
+    String? equipment,
+    String? difficulty,
+    String? instructions,
+  }) async {
+    final res = await client.from('exercises').insert({
+      'name': name,
+      'muscle_group': muscleGroup,
+      'equipment': equipment,
+      'difficulty': difficulty,
+      'instructions': instructions,
+    }).select('id').single();
+    return res['id'] as int;
+  }
+
   // --- ROUTINES ---
   static Future<List<Map<String, dynamic>>> getRoutines() async {
     final user = client.auth.currentUser;

@@ -36,29 +36,39 @@ class _WorkoutPageState extends State<WorkoutPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Iniciar entrenamiento')),
+      appBar: AppBar(
+        title: const Text('Iniciar Entrenamiento'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => context.go('/'),
+        ),
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         children: [
-          const Text('Elige una rutina o empieza libre'),
+          const Text('Elige una rutina', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
           ..._routines.map((r) => Card(
             child: ListTile(
               title: Text(r.name),
-              subtitle: Text(r.description ?? ''),
-              trailing: const Icon(Icons.play_arrow),
+              subtitle: Text(r.description ?? 'Sin descripción'),
+              trailing: const Icon(Icons.play_arrow, color: Colors.green),
               onTap: () => _startWorkout(r.id),
             ),
           )),
-          const Divider(height: 30),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              icon: const Icon(Icons.fitness_center),
-              label: const Text('Entrenamiento libre (sin rutina)'),
-              onPressed: () => _startWorkout(null),
+          const SizedBox(height: 24),
+          const Divider(),
+          const SizedBox(height: 24),
+          ElevatedButton.icon(
+            icon: const Icon(Icons.fitness_center),
+            label: const Text('ENTRENAMIENTO LIBRE'),
+            onPressed: () => _startWorkout(null),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.white.withOpacity(0.05),
+              foregroundColor: Colors.white,
+              side: const BorderSide(color: Colors.grey),
             ),
           ),
         ],

@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import '../../services/supabase_service.dart';
 import '../../models/routine.dart';
 import '../../models/exercise.dart';
+import '../../widgets/workout_set_row.dart';
 
 class ActiveWorkoutPage extends StatefulWidget {
   final int sessionId;
@@ -14,11 +15,8 @@ class ActiveWorkoutPage extends StatefulWidget {
 
 class _ActiveWorkoutPageState extends State<ActiveWorkoutPage> {
   List<RoutineExercise> _exercises = [];
+  Map<int, List<SetData>> _exerciseSets = {};
   bool _loading = true;
-  int _currentExerciseIndex = 0;
-  // formulario para añadir serie
-  final _weightCtrl = TextEditingController();
-  final _repsCtrl = TextEditingController();
   final _notesCtrl = TextEditingController();
 
   @override
@@ -28,177 +26,213 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage> {
   }
 
   Future<void> _loadExercises() async {
-    // Obtener la sesión para ver el routine_id
-    final sessions = await SupabaseService.getSessions(limit: 1);
+    final sessions = await SupabaseService.getSessions(limit: 5);
     final current = sessions.firstWhere((s) => s['id'] == widget.sessionId);
     final routineId = current['routine_id'] as int?;
+    
     if (routineId != null) {
       final data = await SupabaseService.getRoutineExercises(routineId);
       setState(() {
         _exercises = data.map((e) => RoutineExercise.fromMap(e, exercise: Exercise.fromMap(e['exercises']))).toList();
+        for (var ex in _exercises) {
+          _exerciseSets[ex.exerciseId] = List.generate(ex.sets, (index) => SetData(
+            weightCtrl: TextEditingController(),
+            repsCtrl: TextEditingController(),
+          ));
+        }
         _loading = false;
       });
     } else {
-      // Entrenamiento libre: podrías dejar que elija ejercicios del catálogo, simplifico
-      setState(() => _loading = false);
+      // Caso Entrenamiento Libre
+      setState(() {
+        _exercises = [];
+        _loading = false;
+      });
     }
   }
 
-  Future<void> _addSet() async {
-    final weight = double.tryParse(_weightCtrl.text);
-    final reps = int.tryParse(_repsCtrl.text);
-    if (weight == null || reps == null || _exercises.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Completa peso y reps')));
-      return;
-    }
-    final exercise = _exercises[_currentExerciseIndex];
-    final nextSetNumber = await _getNextSetNumber(exercise.id);
-    await SupabaseService.logSet(
-      widget.sessionId,
-      exercise.exerciseId,
-      nextSetNumber,
-      reps,
-      weight,
+  Future<void> _addExerciseToFreeWorkout() async {
+    final allExercises = await SupabaseService.getAllExercises();
+    if (!mounted) return;
+    final selected = await showDialog<Exercise>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: const Text('Añadir Ejercicio'),
+        children: allExercises.map((e) {
+          final ex = Exercise.fromMap(e);
+          return SimpleDialogOption(
+            onPressed: () => Navigator.pop(ctx, ex),
+            child: Text(ex.name),
+          );
+        }).toList(),
+      ),
     );
-    _weightCtrl.clear();
-    _repsCtrl.clear();
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Serie añadida')));
+    if (selected != null) {
+      setState(() {
+        _exercises.add(RoutineExercise(
+          id: -1, // Temporal
+          exerciseId: selected.id,
+          sets: 3,
+          reps: 10,
+          restSeconds: 60,
+          orderIndex: _exercises.length,
+          exercise: selected,
+        ));
+        _exerciseSets[selected.id] = List.generate(3, (index) => SetData(
+          weightCtrl: TextEditingController(),
+          repsCtrl: TextEditingController(),
+        ));
+      });
+    }
   }
 
-  Future<int> _getNextSetNumber(int exerciseId) async {
-    final logs = await SupabaseService.getSetLogs(widget.sessionId);
-    return logs.where((l) => l['exercise_id'] == exerciseId).length + 1;
+  void _addSet(int exerciseId) {
+    setState(() {
+      _exerciseSets[exerciseId]!.add(SetData(
+        weightCtrl: TextEditingController(),
+        repsCtrl: TextEditingController(),
+      ));
+    });
   }
 
   Future<void> _finishWorkout() async {
-    await SupabaseService.finishWorkout(widget.sessionId, notes: _notesCtrl.text.trim());
-    // Actualizar racha
-    final profile = await SupabaseService.getProfile();
-    if (profile != null) {
-      final today = DateTime.now();
-      final last = profile['last_workout_date'] != null ? DateTime.parse(profile['last_workout_date'] as String) : null;
-      int newStreak = 1;
-      if (last != null) {
-        final diff = today.difference(last).inDays;
-        if (diff == 1) {
-          newStreak = (profile['current_streak'] as int) + 1;
-        } else if (diff == 0) {
-          newStreak = profile['current_streak'] as int;
+    // 1. Guardar todos los logs de las series
+    for (var entry in _exerciseSets.entries) {
+      final exId = entry.key;
+      final sets = entry.value;
+      for (int i = 0; i < sets.length; i++) {
+        final weight = double.tryParse(sets[i].weightCtrl.text);
+        final reps = int.tryParse(sets[i].repsCtrl.text);
+        if (weight != null && reps != null) {
+          await SupabaseService.logSet(widget.sessionId, exId, i + 1, reps, weight);
         }
       }
-      await SupabaseService.updateStreak(newStreak, today);
-      // Otorgar insignias según logros
-      if (newStreak == 5) {
-        await SupabaseService.awardBadge('Racha de 5 días', 'Has entrenado 5 días seguidos');
-      } else if (newStreak == 10) {
-        await SupabaseService.awardBadge('Racha de 10 días', '¡Disciplina constante!');
-      }
     }
+
+    // 2. Finalizar sesión
+    await SupabaseService.finishWorkout(widget.sessionId, notes: _notesCtrl.text.trim());
+    
+    // 3. Lógica de Logros y Rachas (Simulada por ahora)
+    await _checkAchievements();
+
     if (mounted) context.go('/');
+  }
+
+  Future<void> _checkAchievements() async {
+    // 1. Obtener datos para evaluación
+    final profileData = await SupabaseService.getProfile();
+    final sessions = await SupabaseService.getSessions(limit: 50);
+    final logs = await SupabaseService.getSetLogs(widget.sessionId);
+    
+    final int streak = profileData?['current_streak'] ?? 0;
+    final int totalSessions = sessions.length;
+    final double maxWeight = logs.isNotEmpty 
+        ? logs.map((l) => (l['weight_kg'] as num).toDouble()).reduce((a, b) => a > b ? a : b)
+        : 0;
+
+    // 2. Evaluar hitos
+    if (totalSessions >= 1) {
+      await SupabaseService.awardBadge('Primer Paso', 'Has completado tu primer entrenamiento.');
+    }
+    if (streak >= 7) {
+      await SupabaseService.awardBadge('Constancia de Hierro', 'Racha de 7 días completada.');
+    }
+    if (maxWeight >= 100) {
+      await SupabaseService.awardBadge('Club de los 100', 'Levantaste 100kg o más en un ejercicio.');
+    }
+    if (totalSessions >= 10) {
+      await SupabaseService.awardBadge('Veterano', 'Has completado 10 sesiones de entrenamiento.');
+    }
+    if (totalSessions >= 50) {
+      await SupabaseService.awardBadge('Bestia del Moro', '¡50 entrenamientos completados!');
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     if (_loading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    if (_exercises.isEmpty) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Entrenamiento libre')),
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Text('No hay ejercicios predefinidos.'),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: _finishWorkout,
-                child: const Text('Finalizar entrenamiento'),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
 
-    final currentExercise = _exercises[_currentExerciseIndex];
     return Scaffold(
       appBar: AppBar(
-        title: Text(currentExercise.exercise?.name ?? 'Ejercicio'),
+        leading: IconButton(
+          icon: const Icon(Icons.close),
+          onPressed: () => context.go('/'),
+        ),
+        title: const Text('Entrenamiento Activo'),
         actions: [
           TextButton(
             onPressed: _finishWorkout,
-            child: const Text('Finalizar'),
+            child: const Text('FINALIZAR', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
-      body: Padding(
+      floatingActionButton: _exercises.isEmpty || _exerciseSets.keys.length < _exercises.length 
+        ? FloatingActionButton.extended(
+            onPressed: _addExerciseToFreeWorkout,
+            label: const Text('AÑADIR EJERCICIO'),
+            icon: const Icon(Icons.add),
+          )
+        : FloatingActionButton(
+            onPressed: _addExerciseToFreeWorkout,
+            child: const Icon(Icons.add),
+          ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          ..._exercises.map((ex) => _buildExerciseCard(ex)),
+          const SizedBox(height: 24),
+          TextField(
+            controller: _notesCtrl,
+            decoration: const InputDecoration(
+              labelText: 'Notas del entrenamiento',
+              hintText: '¿Cómo te sentiste hoy?',
+              prefixIcon: Icon(Icons.edit_note),
+            ),
+            maxLines: 2,
+          ),
+          const SizedBox(height: 40),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildExerciseCard(RoutineExercise re) {
+    final sets = _exerciseSets[re.exerciseId] ?? [];
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('${currentExercise.sets} series x ${currentExercise.reps} reps, Descanso: ${currentExercise.restSeconds}s',
-                style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            if (currentExercise.exercise?.instructions != null)
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Text(currentExercise.exercise!.instructions!, style: TextStyle(color: Colors.grey[300])),
-                ),
-              ),
-            const SizedBox(height: 20),
-            Text('Añadir serie:', style: Theme.of(context).textTheme.titleSmall),
             Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Expanded(
-                  child: TextField(
-                    controller: _weightCtrl,
-                    decoration: const InputDecoration(labelText: 'Peso (kg)'),
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  child: Text(
+                    re.exercise?.name ?? 'Ejercicio',
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.green),
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextField(
-                    controller: _repsCtrl,
-                    decoration: const InputDecoration(labelText: 'Reps'),
-                    keyboardType: TextInputType.number,
-                  ),
-                ),
-                const SizedBox(width: 12),
                 IconButton(
-                  icon: const Icon(Icons.add_circle, size: 40),
-                  color: Theme.of(context).colorScheme.primary,
-                  onPressed: _addSet,
+                  icon: const Icon(Icons.info_outline, size: 20, color: Colors.grey),
+                  onPressed: () {}, // Mostrar instrucciones
                 ),
               ],
             ),
             const SizedBox(height: 12),
-            TextField(
-              controller: _notesCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Notas de la sesión',
-                prefixIcon: Icon(Icons.note),
-              ),
-              maxLines: 1,
-            ),
-            const SizedBox(height: 20),
-            Expanded(
-              child: _SetHistory(sessionId: widget.sessionId, exerciseId: currentExercise.exerciseId),
-            ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                if (_currentExerciseIndex > 0)
-                  OutlinedButton(
-                    onPressed: () => setState(() => _currentExerciseIndex--),
-                    child: const Text('Anterior'),
-                  ),
-                if (_currentExerciseIndex < _exercises.length - 1)
-                  ElevatedButton(
-                    onPressed: () => setState(() => _currentExerciseIndex++),
-                    child: const Text('Siguiente ejercicio'),
-                  ),
-              ],
+            ...List.generate(sets.length, (index) => WorkoutSetRow(
+              setNumber: index + 1,
+              weightCtrl: sets[index].weightCtrl,
+              repsCtrl: sets[index].repsCtrl,
+              onDelete: () => setState(() => sets.removeAt(index)),
+            )),
+            const SizedBox(height: 8),
+            TextButton.icon(
+              onPressed: () => _addSet(re.exerciseId),
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('AÑADIR SERIE'),
+              style: TextButton.styleFrom(foregroundColor: Colors.grey),
             ),
           ],
         ),
@@ -207,29 +241,8 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage> {
   }
 }
 
-class _SetHistory extends StatelessWidget {
-  final int sessionId;
-  final int exerciseId;
-  const _SetHistory({required this.sessionId, required this.exerciseId});
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<List<Map<String, dynamic>>>(
-      future: SupabaseService.getSetLogs(sessionId),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) return const Center(child: Text('Cargando historial...'));
-        final logs = snapshot.data!.where((l) => l['exercise_id'] == exerciseId).toList();
-        if (logs.isEmpty) return const Text('No hay series registradas aún.');
-        return ListView.builder(
-          shrinkWrap: true,
-          itemCount: logs.length,
-          itemBuilder: (_, i) => ListTile(
-            leading: CircleAvatar(child: Text('${logs[i]['set_number']}')),
-            title: Text('${logs[i]['reps_done']} reps'),
-            subtitle: Text('${logs[i]['weight_kg']} kg'),
-          ),
-        );
-      },
-    );
-  }
+class SetData {
+  final TextEditingController weightCtrl;
+  final TextEditingController repsCtrl;
+  SetData({required this.weightCtrl, required this.repsCtrl});
 }
